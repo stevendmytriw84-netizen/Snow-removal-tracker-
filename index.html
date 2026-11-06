@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#15251f">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Snow Route Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#101915;--panel:#1b2923;--panel2:#24352d;--text:#f2f6f3;--muted:#a9b8af;--green:#27b36a;--red:#ed5b5b;--yellow:#e6b943;--line:#35483e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:16px 16px 12px;background:#15251f;position:sticky;top:0;z-index:500;border-bottom:1px solid var(--line)}
+h1{font-size:21px;margin:0 0 4px}.sub{font-size:12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.stat{background:var(--panel2);border-radius:12px;padding:9px;text-align:center}.num{font-size:22px;font-weight:750}.small{font-size:11px;color:var(--muted)}
+main{padding:12px;max-width:900px;margin:auto}
+#map{height:42vh;min-height:270px;border-radius:15px;border:1px solid var(--line);overflow:hidden;background:#26352e}
+.hint{font-size:12px;color:var(--muted);margin:8px 2px 12px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+button,.filelabel{border:0;border-radius:11px;padding:12px 10px;background:var(--panel2);color:var(--text);font-weight:650;font-size:14px;cursor:pointer;text-align:center}
+button.primary{background:var(--green);color:#062313}.danger{background:#492b2b}
+input,select{width:100%;border:1px solid var(--line);border-radius:10px;background:#111c17;color:var(--text);padding:12px;font-size:15px}
+.form{display:none;background:var(--panel);padding:12px;border:1px solid var(--line);border-radius:14px;margin:10px 0}
+.form.show{display:block}.form label{display:block;font-size:12px;color:var(--muted);margin:8px 0 5px}
+.form .row{display:flex;gap:8px}.form .row>*{flex:1}
+h2{font-size:17px;margin:18px 2px 9px}
+.filters{display:flex;gap:7px;overflow:auto;padding-bottom:5px}.filters button{white-space:nowrap;padding:9px 12px;font-size:12px}
+.filters button.active{outline:2px solid var(--green)}
+#houses{display:grid;gap:8px}.house{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);padding:11px;border-radius:13px}
+.dot{width:13px;height:13px;border-radius:50%;flex:none}.houseinfo{min-width:0;flex:1}.house-name{font-weight:700;overflow-wrap:anywhere}.addr{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.house select{width:auto;max-width:130px;padding:8px;font-size:12px}.house button{padding:8px 9px;font-size:12px}
+.empty{padding:18px;text-align:center;color:var(--muted);background:var(--panel);border-radius:12px}
+footer{font-size:11px;color:var(--muted);padding:16px 4px 28px;line-height:1.5}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#1b2923;color:#f2f6f3}.leaflet-popup-content button{margin-top:6px}
+@media(min-width:700px){#map{height:480px}.actions{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>❄️ Snow Route Tracker</h1>
+  <div class="sub">Tap the satellite map to add a customer. Your list is saved on this device.</div>
+  <div class="stats">
+    <div class="stat"><div class="num" id="total">0</div><div class="small">TOTAL</div></div>
+    <div class="stat"><div class="num" id="done" style="color:var(--green)">0</div><div class="small">DONE</div></div>
+    <div class="stat"><div class="num" id="left" style="color:var(--red)">0</div><div class="small">LEFT</div></div>
+  </div>
+</header>
+<main>
+  <div id="map"></div>
+  <div class="hint">Map colours: <b style="color:#27b36a">green = done</b> · <b style="color:#ed5b5b">red = not done</b> · <b style="color:#e6b943">yellow = working</b>. Tap anywhere on the map to add a house pin.</div>
+  <div class="actions">
+    <button class="primary" id="addBtn">＋ Add house</button>
+    <button id="locBtn">◎ My location</button>
+    <button id="exportBtn">Export backup</button>
+    <button id="kmlBtn">Export for Google Earth</button>
+  </div>
+  <div class="form" id="form">
+    <strong id="formTitle">Add customer house</strong>
+    <label>Customer / house name</label><input id="name" placeholder="e.g. Smith house">
+    <label>Address or notes (optional)</label><input id="address" placeholder="Street address or driveway notes">
+    <div class="row" style="margin-top:10px"><button class="primary" id="saveBtn">Save house</button><button id="cancelBtn">Cancel</button></div>
+  </div>
+  <h2>Customer houses</h2>
+  <div class="filters" id="filters">
+    <button class="active" data-filter="all">All</button><button data-filter="todo">Not done</button><button data-filter="working">Working</button><button data-filter="done">Done</button>
+  </div>
+  <div id="houses"><div class="empty">No houses yet. Tap “Add house”, then tap each house location on the map.</div></div>
+  <div class="actions" style="margin-top:14px">
+    <button id="resetBtn" class="danger">Reset statuses for new snowfall</button>
+    <button id="importBtn">Import backup</button>
+  </div>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <footer>
+    This app stores customer names, pins and statuses in this browser on this phone. Use “Export backup” regularly before changing phones or clearing browser data. The map imagery is Esri World Imagery satellite, not Google Earth imagery. “Export for Google Earth” creates a KML file you can open in Google Earth to view your saved house pins. Map tiles and location services require internet access.
+  </footer>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const KEY='snowRouteTracker_v1';
+let houses=[];let filter='all';let pending=null;let editingId=null;let markers={};
+try{houses=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){houses=[]}
+const map=L.map('map').setView([53.5,-112.05],13);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
+ maxZoom:19,attribution:'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics'
+}).addTo(map);
+const colors={todo:'#ed5b5b',working:'#e6b943',done:'#27b36a'};
+function save(){localStorage.setItem(KEY,JSON.stringify(houses));render()}
+function markerIcon(status){return L.divIcon({className:'',html:`<div style="width:19px;height:19px;border-radius:50%;background:${colors[status]};border:3px solid white;box-shadow:0 1px 5px #000;box-sizing:border-box"></div>`,iconSize:[19,19],iconAnchor:[9,9]})}
+function popup(h){return `<b>${esc(h.name)}</b><br>${esc(h.address||'')}<br><small>Status: ${h.status==='done'?'Done':h.status==='working'?'Working':'Not done'}</small><br><button onclick="setStatus('${h.id}','done')">Mark done</button> <button onclick="setStatus('${h.id}','working')">Working</button>`}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function drawMarkers(){Object.values(markers).forEach(m=>map.removeLayer(m));markers={};houses.forEach(h=>{const m=L.marker([h.lat,h.lng],{icon:markerIcon(h.status)}).addTo(map).bindPopup(popup(h));markers[h.id]=m})}
+function render(){
+ const d=houses.filter(h=>h.status==='done').length;
+ document.getElementById('total').textContent=houses.length;document.getElementById('done').textContent=d;document.getElementById('left').textContent=houses.length-d;
+ const shown=houses.filter(h=>filter==='all'||(filter==='todo'&&h.status==='todo')||(filter==='done'&&h.status==='done')||(filter==='working'&&h.status==='working'));
+ document.getElementById('houses').innerHTML=shown.length?shown.map(h=>`<div class="house"><span class="dot" style="background:${colors[h.status]}"></span><div class="houseinfo"><div class="house-name">${esc(h.name)}</div><div class="addr">${esc(h.address||'No address/notes')}</div></div><select aria-label="Status" onchange="setStatus('${h.id}',this.value)"><option value="todo" ${h.status==='todo'?'selected':''}>Not done</option><option value="working" ${h.status==='working'?'selected':''}>Working</option><option value="done" ${h.status==='done'?'selected':''}>Done</option></select><button onclick="focusHouse('${h.id}')">Map</button><button onclick="editHouse('${h.id}')">Edit</button></div>`).join(''):'<div class="empty">No houses in this view.</div>';
+ drawMarkers();
+}
+window.setStatus=(id,status)=>{const h=houses.find(x=>x.id===id);if(h){h.status=status;h.updated=new Date().toISOString();save()}};
+window.focusHouse=id=>{const h=houses.find(x=>x.id===id);if(h){map.setView([h.lat,h.lng],18);markers[id]?.openPopup()}};
+window.editHouse=id=>{const h=houses.find(x=>x.id===id);if(!h)return;editingId=id;pending={lat:h.lat,lng:h.lng};document.getElementById('formTitle').textContent='Edit customer house';document.getElementById('name').value=h.name;document.getElementById('address').value=h.address||'';document.getElementById('form').classList.add('show');document.getElementById('name').focus()};
+function openForm(lat,lng){editingId=null;pending={lat,lng};document.getElementById('formTitle').textContent='Add customer house';document.getElementById('name').value='';document.getElementById('address').value='';document.getElementById('form').classList.add('show');document.getElementById('name').focus()}
+map.on('click',e=>openForm(e.latlng.lat,e.latlng.lng));
+document.getElementById('addBtn').onclick=()=>{document.getElementById('formTitle').textContent='Add customer house';pending=null;editingId=null;document.getElementById('name').value='';document.getElementById('address').value='';document.getElementById('form').classList.add('show');alert('Tap the exact house location on the satellite map to place its pin, then enter the customer name.')};
+document.getElementById('saveBtn').onclick=()=>{const name=document.getElementById('name').value.trim();if(!name){alert('Enter a customer or house name.');return}if(!pending){alert('Tap the house location on the map first.');return}
+ if(editingId){const h=houses.find(x=>x.id===editingId);Object.assign(h,{name,address:document.getElementById('address').value.trim(),lat:pending.lat,lng:pending.lng})}
+ else houses.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name,address:document.getElementById('address').value.trim(),lat:pending.lat,lng:pending.lng,status:'todo',created:new Date().toISOString()});
+ document.getElementById('form').classList.remove('show');pending=null;editingId=null;save()};
+document.getElementById('cancelBtn').onclick=()=>document.getElementById('form').classList.remove('show');
+document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('#filters button').forEach(x=>x.classList.toggle('active',x===b));render()});
+document.getElementById('locBtn').onclick=()=>{if(!navigator.geolocation){alert('Location is not available in this browser.');return}navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],17),()=>alert('Could not get your location. Check phone location permission.'),{enableHighAccuracy:true,timeout:10000})};
+document.getElementById('exportBtn').onclick=()=>{download('snow-route-backup.json',JSON.stringify({version:1,houses},null,2),'application/json')};
+document.getElementById('kmlBtn').onclick=()=>{const placemarks=houses.map(h=>`<Placemark><name>${xml(h.name)}</name><description>${xml((h.address||'')+' | '+h.status)}</description><Style><IconStyle><color>${h.status==='done'?'ff6abf27':h.status==='working'?'ff43b9e6':'ff5b5bed'}</color></IconStyle></Style><Point><coordinates>${h.lng},${h.lat},0</coordinates></Point></Placemark>`).join('');const kml=`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Snow Removal Houses</name>${placemarks}</Document></kml>`;download('snow-removal-houses.kml',kml,'application/vnd.google-earth.kml+xml')};
+function xml(s){return String(s||'').replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]))}
+function download(name,data,type){const a=document.createElement('a');const u=URL.createObjectURL(new Blob([data],{type}));a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+document.getElementById('resetBtn').onclick=()=>{if(confirm('Set every customer back to Not done for the next snowfall? This keeps all house pins and names.')){houses.forEach(h=>h.status='todo');save()}};
+document.getElementById('importBtn').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const obj=JSON.parse(await f.text());const incoming=Array.isArray(obj)?obj:obj.houses;if(!Array.isArray(incoming))throw Error();if(confirm('Replace the current house list with '+incoming.length+' imported houses?')){houses=incoming;save()}}catch(err){alert('That backup file could not be read.')}e.target.value=''};
+render();
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
